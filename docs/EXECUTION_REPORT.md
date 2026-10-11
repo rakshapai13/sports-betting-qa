@@ -100,7 +100,7 @@ The balance was unchanged after every rejected request. Payout was correct for t
 
 **Business impact:** Customers can bet money they do not have. The operator never collects the stake on a losing bet but still pays out on a winning one, and letting customers bet on credit is a compliance problem in regulated markets.
 
-**Evidence:** Response bodies quoted above. [05-stale-ui-balance-vs-api.jpg](evidence/05-stale-ui-balance-vs-api.jpg) shows the API reporting -20.00.
+**Evidence:** Response bodies quoted above.
 
 ---
 
@@ -186,7 +186,7 @@ The bet slip validates the stake against this old value, so the "Insufficient ba
 
 **Business impact:** Customers see money they have already spent and can keep betting with it. They only find out the real balance after a reload, and to them it looks like money has disappeared.
 
-**Evidence:** [05-stale-ui-balance-vs-api.jpg](evidence/05-stale-ui-balance-vs-api.jpg): header and bet slip show €20.00 while the API reports -20.00 (the black box in the corner is an overlay I added to show the API response in the same screenshot).
+**Evidence:** [05-stale-ui-balance-vs-api.jpg](evidence/05-stale-ui-balance-vs-api.jpg): header and bet slip still show €20.00 after two €20.00 bets. `GET /api/balance` at that moment returned `{"balance":-20,"currency":"EUR"}`.
 
 ---
 
