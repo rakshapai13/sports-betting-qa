@@ -7,16 +7,16 @@
 | Application | https://qae-assignment-tau.vercel.app (Version 1.0.0) |
 | Layers under test | UI (bet slip, receipt, modals, filters) and REST API |
 
-## How the scenarios were chosen
+## How I chose the scenarios
 
-The feature moves money, so the scenarios are ranked by one question: **if this breaks, does the customer or the operator lose money or lose trust in a number on the screen?**
+The feature takes money from a balance, so I ranked everything by one question: if this breaks, does somebody lose money, or see a wrong amount on screen?
 
-1. **Money integrity first.** Anything that can produce a wrong balance, an unfunded bet or a duplicate bet outranks everything else.
-2. **The API is the last line of defence.** The spec assigns most validation rules to "UI + API". UI checks are a convenience and can be bypassed, so every money rule is tested on both layers.
-3. **Consistency across the journey.** The same bet is shown three times (bet slip, API response, receipt). Disagreement between them is a customer dispute even when the backend is correct.
-4. **Boundaries over volume.** Six scenarios cannot cover every input, so each one sits on a boundary (min/max stake, exact balance, range edges) where defects cluster.
+- Balance and bet integrity come first: wrong balance, a bet the user cannot afford, a bet placed twice.
+- The spec marks most rules as "UI + API". I test the money rules on both, because the UI check can be skipped by calling the API directly.
+- The same bet is shown three times (bet slip, API response, receipt). They have to agree.
+- With only six scenarios I put each one on a boundary: min and max stake, exact balance, edges of a filter range.
 
-Six scenarios are listed in priority order. The first three were executed formally; results and defects are in [EXECUTION_REPORT.md](EXECUTION_REPORT.md).
+The scenarios are in priority order. I executed the first three; results are in [EXECUTION_REPORT.md](EXECUTION_REPORT.md).
 
 | ID | Title | Priority | Type |
 |---|---|---|---|
@@ -27,7 +27,7 @@ Six scenarios are listed in priority order. The first three were executed formal
 | TC-05 | Only upcoming matches can be bet on; invalid match and selection are rejected | High | Business rule / negative |
 | TC-06 | Date and odds filters apply inclusive ranges and reject invalid ranges | Medium | Functional / boundary |
 
-Common precondition for all scenarios: a valid user id; balance reset with `POST /api/reset-balance` and the starting balance read back with `GET /api/balance`; application opened at `/?user-id=<user-id>` in desktop Chrome.
+Precondition for all scenarios: reset the balance with `POST /api/reset-balance`, read the starting balance with `GET /api/balance`, and open the app at `/?user-id=<user-id>` in desktop Chrome.
 
 ---
 
@@ -35,7 +35,7 @@ Common precondition for all scenarios: a valid user id; balance reset with `POST
 
 **Priority:** Critical
 
-**Risk rationale:** This is the product's only revenue path and the journey every customer takes. It is also the only place where match data, bet slip maths, the placement API, the receipt and the balance are exercised together. The specific risk is inconsistency: the customer agrees to one payout on the bet slip and is confirmed a different one, or the balance on screen does not reflect the bet. Either becomes a dispute, and a wrong balance can lead the customer to bet money they no longer have.
+**Risk rationale:** This is the main journey and the only way the product earns money, so it has to work on every build. It is also the only scenario where the match data, the bet slip calculation, the API, the receipt and the balance are checked together. The risk I care about most is that they disagree: the customer accepts one payout on the bet slip and gets a different one on the receipt, or the balance on screen does not go down. Both end in a complaint, and a wrong balance lets the customer bet money they no longer have.
 
 **Test data:** an upcoming match, e.g. Monaco vs Lyon, outcome `1` (home) at 2.15; stake €10.00.
 
@@ -66,7 +66,7 @@ Common precondition for all scenarios: a valid user id; balance reset with `POST
 
 **Priority:** Critical
 
-**Risk rationale:** This rule stops customers from betting money they do not have. If it fails the account goes negative, which is a direct financial loss for the operator and a regulatory problem (betting on credit). The UI check alone is not a control, because it can be bypassed and it depends on the balance shown in the browser being current. The scenario therefore tests the boundary (one cent over, exactly equal) on both layers, and re-checks the UI after a bet has changed the balance.
+**Risk rationale:** This rule stops a customer from betting money they do not have. If it fails, the balance goes negative, which is a direct loss for the operator and in a regulated market also a compliance problem. The UI check is not enough on its own, because it can be bypassed and it depends on the balance in the browser being up to date. So I test the boundary (one cent over, exactly equal) on both layers, and I repeat the UI check after a bet has changed the balance.
 
 **Test data:** balance brought to €20.00 (below the €100 stake cap, so the balance rule is the only rule in play).
 
@@ -94,7 +94,7 @@ Common precondition for all scenarios: a valid user id; balance reset with `POST
 
 **Priority:** High
 
-**Risk rationale:** Stake limits (€1.00 to €100.00, two decimals) are the operator's exposure limits, and off-by-one errors at limits are the most common validation defect. Malformed stakes are the more dangerous half: a negative or non-numeric stake that reaches the balance calculation can corrupt the balance outright. The UI restricts what can be typed, so the API has to be tested directly with values the UI would never send.
+**Risk rationale:** The stake limits (€1.00 to €100.00, two decimals) cap how much the operator can lose on one bet, and limits are where off-by-one mistakes usually sit. Invalid stakes worry me more than out-of-range ones: a negative or non-numeric value that reaches the balance calculation could change the balance in the wrong direction. The UI blocks most of these at the keyboard, so the API has to be tested directly with values the UI would never send.
 
 **Test data:** balance at the reset value; any upcoming match; selection HOME.
 
@@ -121,7 +121,7 @@ For each stake below, (a) enter it in the bet slip and observe the field, messag
 - Every accepted value reduces the balance by exactly the stake, and the payout equals stake x odds.
 - No input results in a balance increase.
 
-**Note on the minimum:** the spec contradicts itself. Section 3 and the UI copy in 4.4 say the minimum is €1.00; the table in 4.1 says "Minimum €1.01". This plan treats €1.00 as valid and raises the contradiction as a spec question.
+**Note on the minimum:** the spec is not consistent. Section 3 and the UI text in 4.4 say the minimum is €1.00, the table in 4.1 says "Minimum €1.01". I treat €1.00 as valid and list it as an open question.
 
 ---
 
@@ -129,7 +129,7 @@ For each stake below, (a) enter it in the bet slip and observe the field, messag
 
 **Priority:** High
 
-**Risk rationale:** Placement takes a couple of seconds, which is exactly when an impatient customer clicks again. A second request means a second stake taken for a bet the customer did not intend, with only one receipt to show for it. The same applies to the failure path: "Rebet" must retry once, and a failed attempt must not take money. The spec defines the guards (loading state, one final outcome, `409` for a bet already in progress), so each is checked.
+**Risk rationale:** Placing a bet takes a couple of seconds, and that is when people click again. A second request means a second stake taken for a bet the customer did not want. The failure path has the same risk: Rebet must retry once, and a failed attempt must not take any money. The spec describes the guards (loading state, one final outcome, `409` when a bet is already in progress), so I check each of them.
 
 **Steps**
 
@@ -153,7 +153,7 @@ For each stake below, (a) enter it in the bet slip and observe the field, messag
 
 **Priority:** High
 
-**Risk rationale:** The feature is pre-match only. A bet accepted on a match that has already kicked off or finished is a bet on a known result, which is the classic way a sportsbook loses money to abuse. The API must enforce this itself, along with the identity of the match and outcome, because the UI can be bypassed.
+**Risk rationale:** The feature is pre-match only. A bet on a match that has already started or finished is a bet on a known result, which is an easy way for a sportsbook to lose money. The API has to enforce this itself, and also validate the match id and the selection, because the UI can be bypassed.
 
 **Steps**
 
@@ -179,7 +179,7 @@ For each stake below, (a) enter it in the bet slip and observe the field, messag
 
 **Priority:** Medium
 
-**Risk rationale:** Filters do not move money, so a defect here costs usability rather than funds; that is why this scenario ranks last. It still matters: a filter that silently drops matches at the edge of a range hides bettable events from customers, and the spec is explicit that ranges are inclusive and that invalid ranges must be rejected with clear feedback.
+**Risk rationale:** Filters do not touch money, so a bug here is a usability problem and not a financial one. That is why this is last. It still matters, because a filter that drops matches at the edge of a range hides events the customer could bet on, and the spec is clear that ranges are inclusive and invalid ranges must be rejected with a message.
 
 **Steps**
 
@@ -203,6 +203,6 @@ For each stake below, (a) enter it in the bet slip and observe the field, messag
 
 ---
 
-## Out of scope for this plan
+## Not covered
 
-Live betting, accumulators, other sports and mobile layouts are excluded by the specification. Bet settlement, performance under load, accessibility and cross-browser behaviour are not covered by these six scenarios; they are discussed in [STRATEGY.md](STRATEGY.md).
+Live betting, accumulators, other sports and mobile layouts are out of scope in the spec. Bet settlement, load, accessibility and other browsers are not covered by these six scenarios.

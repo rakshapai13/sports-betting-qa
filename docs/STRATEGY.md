@@ -1,76 +1,54 @@
 # Strategy and Recommendations
 
-## 1. Why these two tests were automated
+## Why these two tests
 
-With a budget of two tests, each one has to earn its place. Candidates were scored on four questions:
+I could only automate two, so I picked by risk first and then by how reliably the test can run.
 
-- **Risk:** what does it cost if this breaks in production?
-- **Frequency:** how often does a customer hit it, and how often would a tester have to repeat it?
-- **Stability:** can it be automated deterministically against this environment?
-- **Layer:** is this the cheapest layer at which the check is still meaningful?
+**UI: place a single bet end to end.** This is the journey every customer takes, and it is the only test that sees all the parts together: match list, bet slip, the place-bet call, the receipt and the balance. What it really checks is that the three views of the same bet agree. That is exactly where I found the worst UI defects (wrong payout on the receipt, teams reversed, balance not updated), and they are the kind of thing you stop noticing when you check by eye for the tenth time. It is also a stable flow to automate: one path, ids on the elements, data taken from the API.
 
-| Candidate | Risk | Frequency | Stable to automate | Decision |
-|---|---|---|---|---|
-| Place a single bet end to end (UI) | Highest: the revenue path | Every customer, every release | Yes | **Automated (UI)** |
-| Stake cannot exceed balance (API) | Highest: unfunded bets | Every release | Yes | **Automated (API)** |
-| Stake min / max / precision matrix (API) | High | Every release | Yes | Next to automate |
-| Duplicate submission on double click | High | Occasional | Timing-dependent in the UI | Manual for now |
-| Failure path: error modal, Rebet | High | Rare | No failure trigger available | Manual for now |
-| Past matches not bettable | High | Every release | Needs date control | Next to automate (API) |
-| Date and odds filters | Medium | Occasional | Yes, but costly in the UI | Manual |
+**API: a stake above the balance is rejected.** Of all the validation rules this is the one that protects money, and only the server can really enforce it. The UI check can be skipped by calling the API, and it also relies on a balance that turned out to be stale. The test sits on the boundary (one cent over), checks the response and the stored balance, needs no browser and finishes in a few seconds.
 
-**E2E UI test: `test_user_places_single_bet_and_receipt_matches_bet_slip`.** It covers the one journey the feature exists for, and it is the only test that sees the parts working together: match list, bet slip, placement request, receipt and balance. Its assertions are about consistency (what the customer agreed to on the bet slip equals what the receipt confirms equals what the backend stored), which is where the most damaging defects in this build were found: wrong receipt payout, reversed teams and a stale balance. A single run reports all of them because the checks are soft. Expected values come from the API rather than from the screen, so the UI is never compared with itself.
+Between them they cover both layers, one happy path and one negative case, and the two things the business can least afford: a customer who cannot place a correct bet, and a customer who can place one they cannot pay for.
 
-**API test: `test_stake_above_available_balance_is_rejected`.** Of all the validation rules this is the one that protects real money, and it must hold on the server because the UI check can be bypassed and relies on a balance that may be out of date. The test is a boundary test: it first brings the balance below the stake cap so that the balance rule is the only rule in play, then stakes one cent more than the balance and asserts on the response and on the stored balance. It needs no browser, runs in a few seconds and is deterministic, so it can gate every commit.
+Other candidates I considered:
 
-Together the two tests cover both layers, one happy path and one negative boundary, and the two outcomes the business can least afford: a customer who cannot place a correct bet, and a customer who can place a bet they cannot pay for.
-
-## 2. What was left manual, and why
-
-| Area | Why it stays manual for now |
+| Candidate | Why not now |
 |---|---|
-| **Exploratory testing around placement** | Rapid clicks, odd inputs, switching selections mid-flow. This is where unknown defects are found; most of the bug report came from here, not from scripted steps. Automation only re-checks what someone has already thought of. |
-| **Duplicate submission (double click)** | High risk, but in the UI it depends on click timing, which makes an automated version flaky. The durable fix is an idempotency key on the API; once that exists it becomes a simple, stable API test. Until then a short manual check per release is more reliable. |
-| **Failure path (error modal, Rebet, Close)** | The application offers no way to make a placement fail on demand. Testing it needed a stubbed response in the browser. Worth automating as a component test with a mocked API (see 3.1), not as a black-box E2E test. |
-| **Filters (calendar and odds range)** | Medium risk and expensive to automate through a date picker and sliders; the UI would change faster than the test pays back. The filtering logic itself belongs in unit tests. |
-| **Receipt and modal content, copy, layout** | Judging whether a receipt is clear and complete to a customer is a human call. A missing field such as the selection was noticed by reading the receipt against the spec, not by a locator. |
-| **Spec contradictions** | Minimum stake 1.00 or 1.01, initial balance 125.50 or 120.00, payout rounding. These need a product decision before any check can be written down as pass or fail. |
+| Stake min / max / precision matrix on the API | Next in line. Cheap, and ideal for `parametrize`. |
+| Past matches must be rejected by the API | Also next. Simple once BUG-04 is confirmed as a bug. |
+| Double click on Place Bet | Depends on click timing in the UI, so it would be flaky. |
+| Error modal and Rebet | The app gives no way to force a failure. |
+| Filters | Lower risk, and expensive to drive through a date picker. |
 
-## 3. Recommendations if this project were to scale
+## What I left manual
 
-### 3.1 Move checks down the pyramid and keep the UI layer thin
+- **Exploratory testing around placement.** Fast clicks, odd inputs, changing selection mid-flow. Most of my bug list came from this, not from the scripted steps. Automation only repeats what somebody already thought of.
+- **Duplicate submission.** High risk, but a UI test for it would depend on timing. The proper fix is an idempotency key on the API, and then it becomes an easy API test. Until then I would check it by hand each release.
+- **Failure path (error modal, Rebet, Close).** I had to stub the response in the browser to see it at all. It belongs in a component test with a mocked API, not in a black-box E2E test.
+- **Filters.** Medium risk and a lot of UI plumbing for little return. The filter logic itself should be unit tested by the developers.
+- **How the receipt and messages read.** Whether a receipt is complete and clear is a human judgement. I noticed the missing selection by reading the receipt against the spec.
+- **Anything the spec does not settle.** Minimum stake 1.00 or 1.01, starting balance 125.50 or 120.00, how payout is rounded. These need an answer before a check can be pass or fail.
 
-Most rules in the spec are "UI + API" validation rules, and the Critical defects found were all on the API. Put the volume there:
+## Recommendations if this grows
 
-- **API tests** for the whole validation table as one parametrised matrix (stake limits, precision, types, selection, match id, auth, methods), each case asserting status, error code and unchanged balance. Add **contract tests** generated from the published OpenAPI document so that deviations such as `currency: "USD"`, the 500 on malformed JSON or the 200 on `GET /api/place-bet` are caught without hand-written cases.
-- **Component tests** for the bet slip and the modals against a mocked API. This is the right home for the loading state, double-click protection, the error modal and Rebet, and balance refresh: fast, deterministic and able to force failures.
-- **UI end-to-end tests** limited to three to five journeys (place a bet, rejected stake, failed placement and retry). They prove the wiring; they should not carry the rule coverage.
+**1. Put most of the coverage on the API and keep the UI suite small.**
+Nearly every rule in the spec is a validation rule, and all three Critical bugs were on the API. I would cover the whole validation table with parametrised API tests (status, error code, balance unchanged) and add contract tests against the OpenAPI file, which would have caught things like `currency: "USD"` and the 500 on malformed JSON for free. Loading state, double click, error modal and balance refresh fit best in component tests with a mocked API. That leaves three to five UI journeys end to end.
 
-### 3.2 Build a pipeline that gives feedback in minutes and makes known defects visible
+**2. Run it in CI with fast feedback.**
+Lint and API tests on every pull request (under a minute), UI smoke on merge against a preview deployment, the full suite nightly. Publish the JUnit report and failure screenshots. Tests that fail because of a known bug should be marked as expected failures linked to the ticket, so the build stays green but the test starts failing loudly once the fix is in and the mark has to go. There is a manually triggered workflow in `.github/workflows/tests.yml` as a starting point.
 
-- **On every pull request:** lint and API tests (under a minute). **On merge:** UI smoke tests against a preview deployment of that commit. **Nightly:** the full suite. A manual workflow is included in `.github/workflows/tests.yml` as a starting point.
-- Publish JUnit results and failure screenshots as build artifacts (the framework already saves a screenshot on UI failure).
-- Tests that fail because of a known, ticketed defect should be marked as expected failures linked to the ticket, in strict mode, so the build stays green for new work, the defect stays visible, and the test fails loudly the day the fix lands and the marker has to be removed. New failures in Critical tests block the release.
+**3. Make the test data controllable.**
+This was the biggest practical limit:
 
-### 3.3 Make test data and the environment controllable
+- One shared account means tests cannot run in parallel and anyone using the same id can break a run. A throwaway user per test would fix that.
+- There is no way to set a balance. My API test has to place a real 100.00 bet to get down to 20.00. A test-only endpoint would make setup one call.
+- The match list uses real dates. 83 of 103 matches are already in the past and the rest will follow, so a test that needs an upcoming match will eventually find none. Matches should be seeded relative to today.
+- A test switch to force a failed or slow placement would let the error and retry paths be tested properly.
 
-The current environment limits how far automation can go, and each limit has a concrete fix:
+**Spec questions I would raise first**
 
-- **One shared, stateful account.** Tests must run serially and can be disturbed by anyone using the same user. Provide a way to create a throwaway user per test (or a pool of users per CI worker). That unlocks parallel runs.
-- **No way to set a balance.** The API test spends real bets to reach 20.00. A test-only "set balance" endpoint, and a reset that actually returns the documented 125.50, would make set-up one call.
-- **A catalogue tied to real dates.** 83 of 103 matches are already in the past and the rest will follow, so any test that needs an upcoming match will eventually stop finding one. Seed matches relative to the current date, or allow the clock to be injected in test environments.
-- **No failure injection.** A test-only switch (for example a request header that forces a 500, a timeout or a slow response) would let the failure and retry paths be tested end to end.
-- **Idempotency.** An idempotency key on `POST /api/place-bet` fixes the duplicate-bet defect at its root and makes retries safe to test.
-
-### 3.4 Spec clarifications to request
-
-Small, but each one currently blocks a clear pass/fail verdict:
-
-1. Minimum stake: €1.00 (section 3, UI copy) or €1.01 (table 4.1)?
-2. Initial balance: 125.50 (domain notes, reset response) or 120.00 (stored value)?
-3. Payout rounding: half-up to the cent, or truncation? Stated once, applied by UI and API alike.
-4. Is a stake exactly equal to the balance allowed? (Assumed yes.)
-5. Definition of "upcoming": kickoff date after today, or kickoff time after now, and in which time zone?
-6. Who issues the Bet ID? The API response has none.
-7. Odds filter: does a match qualify if any outcome is in range, or only if all are?
-8. Which HTTP status and error code does the API use for insufficient balance? The Swagger schema shows `insufficient_balance` only as an example.
+1. Minimum stake: 1.00 (section 3 and the UI text) or 1.01 (table 4.1)?
+2. Starting balance: 125.50 or 120.00?
+3. How is payout rounded? UI and API should use the same rule.
+4. What status and error code should the API return for insufficient balance? Swagger only has it as an example.
+5. Who creates the Bet ID? The API response does not contain one.

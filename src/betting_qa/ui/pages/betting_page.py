@@ -1,4 +1,4 @@
-"""The single page of the application: match list, bet slip and outcome modals."""
+"""The application's single page: match list, bet slip and the result modals."""
 
 from __future__ import annotations
 
@@ -10,35 +10,27 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from betting_qa.api.models import Match, Selection
 from betting_qa.config import Settings
-from betting_qa.ui.base import Locator, UiObject
+from betting_qa.ui.base import UiObject
 from betting_qa.ui.components.bet_receipt import BetReceiptModal
 from betting_qa.ui.components.bet_slip import BetSlip
 from betting_qa.utils.money import parse_money
 
 
-class BetNotPlacedError(AssertionError):
-    """The application answered a placement attempt with its error modal."""
-
-
 class BettingPage(UiObject):
     HEADER_BALANCE = (By.ID, "header-balance")
-    MATCH_CARDS = (By.CSS_SELECTOR, "#match-list .matchCard")
+    MATCH_CARD = (By.CSS_SELECTOR, "#match-list .matchCard")
     ERROR_MODAL = (By.ID, "modal-error")
     ERROR_MESSAGE = (By.ID, "modal-error-message")
 
     def __init__(self, driver: WebDriver, settings: Settings) -> None:
         super().__init__(driver, settings.ui_timeout)
-        self._settings = settings
+        self.settings = settings
         self.bet_slip = BetSlip(driver, settings.ui_timeout)
         self.receipt = BetReceiptModal(driver, settings.ui_timeout)
 
-    @staticmethod
-    def odds_button(match: Match, selection: Selection) -> Locator:
-        return (By.ID, f"odds-{match.id}-{selection.key}")
-
     def open(self) -> BettingPage:
-        self.driver.get(self._settings.app_url)
-        self.wait_until(EC.presence_of_element_located(self.MATCH_CARDS))
+        self.driver.get(self.settings.app_url)
+        self.wait_until(EC.presence_of_element_located(self.MATCH_CARD))
         return self
 
     @property
@@ -46,29 +38,23 @@ class BettingPage(UiObject):
         return parse_money(self.text_of(self.HEADER_BALANCE))
 
     def header_balance_eventually(self, expected: Decimal) -> Decimal:
-        """Header balance once it shows ``expected``, or whatever it shows at timeout."""
+        """The header balance once it shows `expected`, or whatever it shows at timeout."""
         return self.eventually(lambda: self.header_balance, expected)
 
     def select_odds(self, match: Match, selection: Selection) -> None:
-        self.click(self.odds_button(match, selection))
+        self.click((By.ID, f"odds-{match.id}-{selection.key}"))
         self.visible(BetSlip.SELECTION_CARD)
 
     def place_bet(self) -> BetReceiptModal:
-        """Submit the bet slip and wait for the single final outcome.
-
-        Returns the receipt modal on success. Raises ``BetNotPlacedError`` carrying the
-        error-modal text if the application reports a failure instead.
-        """
+        """Submit the slip and wait for the receipt. Fails if the error modal shows up instead."""
         self.bet_slip.submit()
         self.wait_until(
             EC.any_of(
                 EC.visibility_of_element_located(BetReceiptModal.ROOT),
                 EC.visibility_of_element_located(self.ERROR_MODAL),
             ),
-            timeout=self._settings.bet_outcome_timeout,
+            timeout=self.settings.bet_timeout,
         )
         if self.is_present(self.ERROR_MODAL):
-            raise BetNotPlacedError(
-                f"Bet placement ended in the error modal: {self.text_of(self.ERROR_MESSAGE)}"
-            )
+            raise AssertionError(f"Bet was not placed: {self.text_of(self.ERROR_MESSAGE)}")
         return self.receipt

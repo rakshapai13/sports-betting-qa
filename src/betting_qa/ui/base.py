@@ -1,14 +1,8 @@
-"""Shared Selenium plumbing for page objects and page components.
-
-Only this module talks to ``WebDriverWait``. Pages and components express intent
-("click", "read text", "wait until gone") and never sleep.
-"""
+"""Wait helpers shared by the page object and its components. Nothing here sleeps."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from contextlib import suppress
-from typing import TypeVar
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -17,50 +11,48 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 Locator = tuple[str, str]
-T = TypeVar("T")
 
 
 class UiObject:
-    """Base class for anything that reads from or acts on the browser."""
-
-    def __init__(self, driver: WebDriver, timeout: float = 10.0) -> None:
+    def __init__(self, driver: WebDriver, timeout: float = 10) -> None:
         self.driver = driver
         self.timeout = timeout
 
-    def wait_until(self, condition: Callable[[WebDriver], T], timeout: float | None = None) -> T:
+    def wait_until(self, condition, timeout: float | None = None):
         return WebDriverWait(self.driver, timeout or self.timeout).until(condition)
 
-    def visible(self, locator: Locator, timeout: float | None = None) -> WebElement:
-        return self.wait_until(EC.visibility_of_element_located(locator), timeout)
-
-    def is_present(self, locator: Locator) -> bool:
-        return bool(self.driver.find_elements(*locator))
+    def visible(self, locator: Locator) -> WebElement:
+        return self.wait_until(EC.visibility_of_element_located(locator))
 
     def text_of(self, locator: Locator) -> str:
         return self.visible(locator).text.strip()
 
+    def is_present(self, locator: Locator) -> bool:
+        return bool(self.driver.find_elements(*locator))
+
     def click(self, locator: Locator) -> None:
-        """Scroll the element to mid-viewport (clear of the sticky header), then click."""
+        # The header is sticky. Without centring first, a card low in the list gets
+        # scrolled up underneath it and the header takes the click.
         element = self.wait_until(EC.presence_of_element_located(locator))
         self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
         self.wait_until(EC.element_to_be_clickable(locator)).click()
 
-    def wait_gone(self, locator: Locator, timeout: float | None = None) -> None:
-        self.wait_until(EC.invisibility_of_element_located(locator), timeout)
+    def wait_gone(self, locator: Locator) -> None:
+        self.wait_until(EC.invisibility_of_element_located(locator))
 
-    def eventually(self, read: Callable[[], T], expected: T, timeout: float | None = None) -> T:
-        """Poll ``read`` until it returns ``expected``; return the last value either way.
+    def eventually(self, read, expected):
+        """Poll `read()` until it returns `expected`.
 
-        Lets a test assert on a value that updates asynchronously and still report
-        what the UI actually showed when the wait ran out.
+        Returns the last value seen even on timeout, so the caller's assert can
+        report what was actually on screen.
         """
         last = read()
 
-        def matches(_: WebDriver) -> bool:
+        def matches(_driver) -> bool:
             nonlocal last
             last = read()
             return last == expected
 
         with suppress(TimeoutException):
-            self.wait_until(matches, timeout)
+            self.wait_until(matches)
         return last

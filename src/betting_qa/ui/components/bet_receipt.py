@@ -1,4 +1,4 @@
-"""The success receipt modal shown after a bet is accepted."""
+"""The receipt modal shown after a bet is accepted."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from betting_qa.utils.money import parse_money
 
 @dataclass(frozen=True)
 class Receipt:
-    """Snapshot of the receipt content, detached from the browser."""
-
     bet_id: str
     fixture: str
     stake: Decimal
@@ -34,6 +32,7 @@ class BetReceiptModal(UiObject):
     CLOSE = (By.ID, "modal-success-close")
 
     def read(self) -> Receipt:
+        """Copy the values out so they can still be checked after the modal is closed."""
         return Receipt(
             bet_id=self.text_of(self.BET_ID),
             fixture=self.text_of(self.FIXTURE),

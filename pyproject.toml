@@ -2,18 +2,15 @@
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
+log_level = "INFO"
 markers = [
-    "api: tests that talk to the REST API only (no browser)",
-    "ui: end-to-end tests that drive the application in Chrome",
+    "api: API tests, no browser",
+    "ui: end-to-end tests in Chrome",
 ]
-log_cli = true
-log_cli_level = "INFO"
-log_cli_format = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
