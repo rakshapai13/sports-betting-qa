@@ -1,0 +1,16 @@
+# Local configuration and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+
+# Test output
+artifacts/
+report.xml

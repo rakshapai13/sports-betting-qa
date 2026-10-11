@@ -1,0 +1,42 @@
+# Runs the suite on demand. Requires a repository secret named QA_USER_ID.
+# Triggered manually on purpose: the suite targets a shared, stateful test
+# environment and currently reports known application defects (see README).
+name: tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      QA_USER_ID: ${{ secrets.QA_USER_ID }}
+      QA_HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: API tests
+        run: pytest -m api --junitxml=artifacts/api.xml
+
+      - name: UI tests
+        if: always()
+        run: pytest -m ui --junitxml=artifacts/ui.xml
+
+      - name: Upload results and failure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: artifacts/
