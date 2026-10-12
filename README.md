@@ -64,12 +64,10 @@ Settings, read from `.env` or the environment:
 
 Both tests fail against Version 1.0.0, and they should: each one hits a real defect from the bug report.
 
-| Test | What fails | Bug |
-|---|---|---|
-| `test_stake_above_available_balance_is_rejected` | Stake 20.01 with balance 20.00 returns 200 and the balance becomes -0.01 | BUG-01 |
-| `test_user_places_single_bet_and_receipt_matches_bet_slip` | Receipt shows the away team first | BUG-07 |
-| | Receipt payout is stake x 2 instead of stake x odds | BUG-06 |
-| | Header balance does not change after the bet | BUG-05 |
+| Test | What fails |
+|---|---|
+| `test_stake_above_available_balance_is_rejected` | Stake 20.01 with balance 20.00 returns 200 and the balance becomes -0.01 (BUG-01) |
+| `test_user_places_single_bet_and_receipt_matches_bet_slip` | Three checks fail:<br>1. Receipt shows the away team first (BUG-07)<br>2. Receipt payout is stake x 2 instead of stake x odds (BUG-06)<br>3. Header balance does not change after the bet (BUG-05) |
 
 The rest of the UI journey passes (bet slip values, placing the bet, receipt stake and odds, slip cleared, API balance reduced). The UI test uses soft assertions, so the three mismatches come out in one run.
 
