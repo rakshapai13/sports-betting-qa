@@ -24,14 +24,18 @@ Two extras: `python-dotenv`, so the user id can live in a local `.env` file inst
 
 ## Setup
 
+You need Python 3.10 or newer and Google Chrome.
+
 ```bash
+git clone https://github.com/rakshapai13/sports-betting-qa.git
+cd sports-betting-qa
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env               # then put your user id in .env
+cp .env.example .env               # Windows: copy .env.example .env
 ```
 
-`QA_USER_ID` is the only thing you have to set. Exporting it as an environment variable works too.
+`.env.example` already contains my user id, so the copied `.env` works as it is. To run as a different user, change `QA_USER_ID` in `.env` (or export it as an environment variable).
 
 ## Running
 
@@ -48,11 +52,11 @@ A few things to know:
 - The tests reset the balance of that user before and after each test, so don't test manually with the same id while they run.
 - If the UI test fails, a screenshot is saved in `artifacts/`.
 
-Settings (all optional except the first):
+Settings, read from `.env` or the environment:
 
 | Variable | Default | |
 |---|---|---|
-| `QA_USER_ID` | - | your user id |
+| `QA_USER_ID` | `candidate-5LxhoJ9UlGpX` (from `.env`) | user the tests run as |
 | `QA_BASE_URL` | `https://qae-assignment-tau.vercel.app` | app under test |
 | `QA_HEADLESS` | `1` | set to `0` to see the browser |
 
@@ -96,7 +100,7 @@ tests/
 
 ## Notes on the framework
 
-- Tests have no locators, waits or URLs in them. Locators live in the page object and its components, HTTP calls in the client.
+- The test files have no locators or waits on purpose (Page Object Model). A test only calls methods like `select_odds()`, `enter_stake()` or `place_bet()`. The locators are in `src/betting_qa/ui/pages/betting_page.py` and `src/betting_qa/ui/components/` (bet slip and receipt), and the HTTP calls are in `src/betting_qa/api/client.py`. When the UI changes, only those files need updating, not the tests.
 - No `sleep` and no implicit waits, only explicit waits.
 - Expected values (match, odds, balance) are read from the API at run time. Nothing is hard-coded, so the tests keep working when the match list changes.
 - Amounts are compared as `Decimal`. With floats a one-cent difference can get lost, and one cent is a real bug here.
