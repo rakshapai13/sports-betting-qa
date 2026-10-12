@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Build | Version 1.0.0 at https://qae-assignment-tau.vercel.app |
-| Executed | 11 October 2026 |
+| Executed | 12 October 2026 |
 | Environment | macOS, Chromium-based desktop browser for the manual run, Chrome 154 for the automated tests; API calls sent with the `x-user-id` header |
 | Scope | TC-01, TC-02, TC-03 from [TEST_PLAN.md](TEST_PLAN.md), plus exploratory checks around bet placement |
 | Test data | Balance reset with `POST /api/reset-balance` before each scenario; balances quoted below are read from `GET /api/balance` |
