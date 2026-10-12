@@ -52,7 +52,7 @@ Settings (all optional except the first):
 
 | Variable | Default | |
 |---|---|---|
-| `QA_USER_ID` | candidate-5LxhoJ9UlGpX | your user id |
+| `QA_USER_ID` | - | your user id |
 | `QA_BASE_URL` | `https://qae-assignment-tau.vercel.app` | app under test |
 | `QA_HEADLESS` | `1` | set to `0` to see the browser |
 
